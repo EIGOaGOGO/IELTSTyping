@@ -1,237 +1,948 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IELTS Typing Sprint</title>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import { useState, useEffect, useRef, useCallback } from "react";
 
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            margin: 0; 
-            background-color: #0d0d14; 
-            color: white; 
-            font-family: 'Outfit', sans-serif;
-            overflow-x: hidden;
+// ─── VOCABULARY ───────────────────────────────────────────────────────────────
+// answer: what the student types (clean, no brackets)
+// accepts: array of acceptable answers (for slash variants etc.)
+// display: shown on screen (may include slash variants)
+// hint: bracket content shown as hint
+// jp: Japanese translation
+
+const CATEGORIES = {
+  "Studies & Work": {
+    emoji: "🎓", color: "#f59e0b", jp: "学習・仕事",
+    words: [
+      { answer: "practical", display: "practical", hint: "", jp: "実践的な" },
+      { answer: "diverse", display: "diverse", hint: "", jp: "多様な" },
+      { answer: "top", display: "top", hint: "", jp: "トップの、一流の" },
+      { answer: "undergraduate", display: "undergraduate", hint: "", jp: "学部生" },
+      { answer: "field trip", display: "field trip", hint: "", jp: "校外学習" },
+      { answer: "first-choice university", display: "first-choice university", hint: "", jp: "第一志望の大学" },
+      { answer: "club", display: "club", hint: "", jp: "クラブ、サークル" },
+      { answer: "extra-curricular activity", display: "extra-curricular activity", hint: "", jp: "課外活動" },
+      { answer: "study abroad programme", display: "study abroad programme", hint: "", jp: "海外留学プログラム" },
+      { answer: "job interview", display: "job interview", hint: "", jp: "就職面接" },
+      { answer: "flexible", display: "flexible", hint: "", jp: "融通がきく、柔軟な" },
+      { answer: "supportive", display: "supportive", hint: "", jp: "支援的な" },
+      { answer: "rewarding", display: "rewarding", hint: "", jp: "やりがいのある" },
+      { answer: "juggle", display: "juggle", hint: "", jp: "うまくこなす、両立させる" },
+      { answer: "advance one's career", display: "advance one's career", hint: "", jp: "キャリアを伸ばす" },
+      { answer: "work from home", display: "work from home", hint: "", jp: "在宅勤務する" },
+      { answer: "commute to work", display: "commute to work", hint: "", jp: "通勤する" },
+      { answer: "work night shifts", display: "work night shifts", hint: "", jp: "夜勤をする" },
+      { answer: "get a promotion", display: "get a promotion", hint: "", jp: "昇進する" },
+      { answer: "change one's career path", display: "change one's career path", hint: "", jp: "キャリアチェンジする" },
+    ],
+  },
+  "Places": {
+    emoji: "🏙️", color: "#06b6d4", jp: "場所",
+    words: [
+      { answer: "rooftop", display: "rooftop", hint: "", jp: "屋上" },
+      { answer: "waterfront", display: "waterfront", hint: "", jp: "水辺、海辺" },
+      { answer: "botanical garden", display: "botanical garden", hint: "", jp: "植物園" },
+      { answer: "theme park", display: "theme park", hint: "", jp: "テーマパーク" },
+      { answer: "landmark", display: "landmark", hint: "", jp: "ランドマーク、名所" },
+      { answer: "day nursery", display: "day nursery / day care center", accepts: ["day nursery", "day care center"], hint: "= day care center", jp: "保育所" },
+      { answer: "vibe", display: "vibe", hint: "", jp: "雰囲気" },
+      { answer: "the heart of", display: "the heart of ~", hint: "", jp: "〜の中心部" },
+      { answer: "within walking distance", display: "within walking distance", hint: "", jp: "徒歩圏内" },
+      { answer: "in a fantastic location", display: "in a fantastic location", hint: "", jp: "素晴らしい立地にある" },
+      { answer: "lively", display: "lively", hint: "", jp: "活気のある" },
+      { answer: "multicultural", display: "multicultural", hint: "", jp: "多文化の" },
+      { answer: "fancy", display: "fancy", hint: "", jp: "高級な、おしゃれな" },
+      { answer: "iconic", display: "iconic", hint: "", jp: "象徴的な" },
+      { answer: "communal", display: "communal", hint: "", jp: "共同の" },
+      { answer: "charming", display: "charming", hint: "", jp: "魅力的な" },
+      { answer: "state-of-the-art", display: "state-of-the-art", hint: "", jp: "最先端の" },
+      { answer: "attract", display: "attract", hint: "", jp: "引きつける" },
+      { answer: "boast", display: "boast", hint: "", jp: "（自慢できるものを）持っている" },
+      { answer: "be rich in", display: "be rich in ~", hint: "", jp: "〜が豊富である" },
+    ],
+  },
+  "People": {
+    emoji: "🤝", color: "#ec4899", jp: "人・性格",
+    words: [
+      { answer: "outgoing", display: "outgoing", hint: "sociable, extroverted", jp: "社交的な、外向的な" },
+      { answer: "assertive", display: "assertive", hint: "", jp: "積極的な、自己主張のある" },
+      { answer: "organized", display: "organized", hint: "opposite: disorganized", jp: "整理されている、几帳面な" },
+      { answer: "hilarious", display: "hilarious", hint: "extremely funny", jp: "非常に面白い" },
+      { answer: "knowledgeable", display: "knowledgeable", hint: "experienced", jp: "知識豊富な" },
+      { answer: "approachable", display: "approachable", hint: "", jp: "話しかけやすい" },
+      { answer: "like-minded", display: "like-minded", hint: "", jp: "考え方が似ている" },
+      { answer: "energetic", display: "energetic", hint: "", jp: "エネルギッシュな" },
+      { answer: "impatient", display: "impatient", hint: "", jp: "せっかちな" },
+      { answer: "fussy", display: "fussy", hint: "e.g. She's fussy about coffee.", jp: "こだわりが強い" },
+      { answer: "morning person", display: "morning person", hint: "= early bird", jp: "朝型の人" },
+      { answer: "founder", display: "founder", hint: "e.g. the founder of a company", jp: "創設者" },
+      { answer: "inspiration", display: "inspiration", hint: "", jp: "インスピレーション、刺激" },
+      { answer: "influence", display: "influence", hint: "big / positive / negative influence", jp: "影響" },
+      { answer: "role model", display: "role model", hint: "", jp: "ロールモデル" },
+      { answer: "multi-tasker", display: "multi-tasker", hint: "good at multi-tasking", jp: "マルチタスクが得意な人" },
+      { answer: "from all walks of life", display: "from all walks of life", hint: "", jp: "あらゆる職業・境遇の" },
+      { answer: "background", display: "background", hint: "e.g. students from diverse backgrounds", jp: "出身、背景" },
+      { answer: "have a positive outlook on life", display: "have a positive outlook on life", hint: "", jp: "人生に対してポジティブな見方をする" },
+      { answer: "have a lot in common", display: "have a lot in common", hint: "", jp: "共通点が多い" },
+    ],
+  },
+  "Objects": {
+    emoji: "🛍️", color: "#f97316", jp: "物・モノ",
+    words: [
+      { answer: "texture", display: "texture", hint: "flavour, smell, etc.", jp: "手触り、食感" },
+      { answer: "ready meal", display: "ready meal", hint: "", jp: "出来合いの食事" },
+      { answer: "local ingredients", display: "local ingredients", hint: "", jp: "地元の食材" },
+      { answer: "gadget", display: "gadget", hint: "electronic device", jp: "小型電子機器" },
+      { answer: "appliance", display: "appliance", hint: "e.g. fridge, dishwasher, microwave", jp: "家電製品" },
+      { answer: "beauty products", display: "beauty products", hint: "e.g. cosmetics, sunscreen, moisturizer", jp: "美容製品" },
+      { answer: "exercise equipment", display: "exercise equipment", hint: "e.g. treadmill, weights, yoga mat", jp: "運動器具" },
+      { answer: "playground equipment", display: "playground equipment", hint: "e.g. seesaw, swings, slide, jungle gym", jp: "遊具" },
+      { answer: "fishing tackle", display: "fishing tackle", hint: "lure, hook, rod", jp: "釣り道具" },
+      { answer: "must-have", display: "must-have", hint: "a must-read, a must-see", jp: "必須のもの" },
+      { answer: "durable", display: "durable", hint: "", jp: "丈夫な、耐久性のある" },
+      { answer: "waterproof", display: "waterproof", hint: "", jp: "防水の" },
+      { answer: "organic", display: "organic", hint: "e.g. organic fruits and vegetables", jp: "有機の、オーガニックの" },
+      { answer: "handmade", display: "handmade", hint: "", jp: "手作りの" },
+      { answer: "high-end", display: "high-end", hint: "", jp: "高級な" },
+      { answer: "save for retirement", display: "save for retirement", hint: "or save for education", jp: "老後のために貯金する" },
+      { answer: "specialize in", display: "specialize in ~", hint: "", jp: "〜を専門とする" },
+      { answer: "season", display: "season", hint: "spices / be seasoned with garlic and pepper", jp: "（料理に）味付けをする" },
+      { answer: "keep track of", display: "keep track of ~", hint: "", jp: "〜を把握する、追跡する" },
+      { answer: "go well with", display: "go well with ~", hint: "", jp: "〜とよく合う" },
+    ],
+  },
+  "Activities & Events": {
+    emoji: "🎉", color: "#10b981", jp: "活動・イベント",
+    words: [
+      { answer: "highlight", display: "highlight", hint: "the main highlight of an event", jp: "ハイライト、見どころ" },
+      { answer: "fireworks display", display: "fireworks display", hint: "", jp: "花火大会" },
+      { answer: "nightlife", display: "nightlife", hint: "", jp: "ナイトライフ" },
+      { answer: "day out", display: "day out", hint: "", jp: "日帰り外出" },
+      { answer: "special occasion", display: "special occasion", hint: "", jp: "特別な行事" },
+      { answer: "makeover", display: "makeover", hint: "give my room a makeover / renovation", jp: "改装、模様替え" },
+      { answer: "once-in-a-lifetime opportunity", display: "once-in-a-lifetime opportunity", hint: "", jp: "一生に一度の機会" },
+      { answer: "refreshing", display: "refreshing", hint: "", jp: "さわやかな、新鮮な" },
+      { answer: "monotonous", display: "monotonous", hint: "", jp: "単調な" },
+      { answer: "unforgettable", display: "unforgettable", hint: "experience, moment, trip", jp: "忘れられない" },
+      { answer: "help around the house", display: "help around the house", hint: "share housework", jp: "家事を手伝う" },
+      { answer: "get hands-on experience", display: "get hands-on experience", hint: "", jp: "実践的な経験を得る" },
+      { answer: "sit back and relax", display: "sit back and relax", hint: "", jp: "くつろぐ" },
+      { answer: "make a donation to", display: "make a donation to ~", hint: "", jp: "〜に寄付をする" },
+      { answer: "stand in a queue", display: "stand in a queue", hint: "", jp: "列に並ぶ" },
+      { answer: "have a barbecue", display: "have a barbecue", hint: "", jp: "バーベキューをする" },
+      { answer: "go for a stroll", display: "go for a stroll", hint: "= go for a walk", jp: "散歩に行く" },
+      { answer: "win a prize", display: "win a prize", hint: "or win an award", jp: "賞を取る" },
+      { answer: "achieve personal best", display: "achieve personal best", hint: "", jp: "自己ベストを達成する" },
+      { answer: "feed a baby", display: "feed a baby", hint: "", jp: "赤ちゃんに授乳する・食べさせる" },
+    ],
+  },
+  "Art & Entertainment": {
+    emoji: "🎭", color: "#8b5cf6", jp: "芸術・エンタメ",
+    words: [
+      { answer: "best-selling", display: "best-selling", hint: "a best-selling book, author, or movie", jp: "ベストセラーの" },
+      { answer: "thought-provoking", display: "thought-provoking", hint: "", jp: "考えさせられる" },
+      { answer: "plot", display: "plot", hint: "the plot of a film or book", jp: "あらすじ、プロット" },
+      { answer: "smash hit", display: "smash hit", hint: "", jp: "大ヒット" },
+      { answer: "come out", display: "come out", hint: "", jp: "（映画・本などが）公開される" },
+      { answer: "entitle", display: "entitle", hint: "a novel or film entitled ~", jp: "〜というタイトルをつける" },
+      { answer: "be adapted into a film", display: "be adapted into a film", hint: "", jp: "映画化される" },
+      { answer: "subscribe to", display: "subscribe to ~", hint: "e.g. a streaming service or online news", jp: "〜を購読する、登録する" },
+      { answer: "feature", display: "feature", hint: "be featured in a documentary or movie", jp: "〜に取り上げられる" },
+      { answer: "be translated into", display: "be translated into ~", hint: "", jp: "〜に翻訳される" },
+      { answer: "art gallery", display: "art gallery", hint: "", jp: "美術館、画廊" },
+      { answer: "life-size", display: "life-size", hint: "", jp: "実物大の" },
+      { answer: "natural history museum", display: "natural history museum", hint: "", jp: "自然史博物館" },
+      { answer: "house", display: "house", hint: "e.g. the museum houses rare artifacts", jp: "（作品などを）所蔵する" },
+      { answer: "do a drawing of", display: "do a drawing of ~", hint: "", jp: "〜の絵を描く" },
+      { answer: "stunning", display: "stunning", hint: "", jp: "息をのむような、素晴らしい" },
+      { answer: "picturesque", display: "picturesque", hint: "", jp: "絵のように美しい" },
+      { answer: "string instrument", display: "string instrument", hint: "", jp: "弦楽器" },
+      { answer: "catchy tune", display: "catchy tune", hint: "", jp: "耳に残るメロディー" },
+      { answer: "sing along", display: "sing along a song", hint: "", jp: "歌に合わせて歌う" },
+    ],
+  },
+  "Travel & Transport": {
+    emoji: "✈️", color: "#3b82f6", jp: "旅行・交通",
+    words: [
+      { answer: "guided tour", display: "guided tour", hint: "", jp: "ガイド付きツアー" },
+      { answer: "tourist destination", display: "tourist destination", hint: "", jp: "観光地" },
+      { answer: "during the holiday season", display: "during the holiday season", hint: "", jp: "休暇シーズン中" },
+      { answer: "historical site", display: "historical site", hint: "", jp: "史跡" },
+      { answer: "luxury hotel", display: "luxury hotel", hint: "a five-star hotel", jp: "高級ホテル" },
+      { answer: "sandy beach", display: "sandy beach", hint: "", jp: "砂浜" },
+      { answer: "see the sights of", display: "see the sights of ~", hint: "", jp: "〜の名所を見て回る" },
+      { answer: "go on a cruise", display: "go on a cruise", hint: "", jp: "クルーズに行く" },
+      { answer: "be worth a visit", display: "be worth a visit", hint: "", jp: "訪れる価値がある" },
+      { answer: "have a rating of", display: "have a rating of ~", hint: "", jp: "〜の評価がある" },
+      { answer: "pedestrian crossing", display: "pedestrian crossing", hint: "", jp: "横断歩道" },
+      { answer: "bike lane", display: "bike lane", hint: "", jp: "自転車専用レーン" },
+      { answer: "rush hour traffic", display: "rush hour traffic", hint: "", jp: "ラッシュアワーの渋滞" },
+      { answer: "book in advance", display: "book ~ in advance", hint: "e.g. book a seat in advance", jp: "前もって予約する" },
+      { answer: "install", display: "install", hint: "", jp: "設置する、インストールする" },
+      { answer: "cause a delay", display: "cause a delay", hint: "", jp: "遅延を引き起こす" },
+      { answer: "get around", display: "get around", hint: "", jp: "移動する" },
+      { answer: "get to and from work", display: "get to and from work", hint: "", jp: "通勤する（行き帰り）" },
+      { answer: "get a speeding ticket", display: "get a speeding ticket", hint: "", jp: "スピード違反の切符を切られる" },
+      { answer: "get stuck in traffic", display: "get stuck in traffic", hint: "", jp: "渋滞にはまる" },
+    ],
+  },
+  "Shopping & Fashion": {
+    emoji: "🛒", color: "#ef4444", jp: "買い物・ファッション",
+    words: [
+      { answer: "physical shop", display: "physical shop", hint: "", jp: "実店舗" },
+      { answer: "high-street shop", display: "high-street shop", hint: "= specialist shop", jp: "大通りの一般的な店" },
+      { answer: "designer brand", display: "designer brand", hint: "", jp: "ブランド品" },
+      { answer: "reusable bag", display: "reusable bag", hint: "", jp: "エコバッグ" },
+      { answer: "bustling", display: "bustling", hint: "", jp: "にぎわっている" },
+      { answer: "distinctive", display: "distinctive", hint: "", jp: "独特の、際立った" },
+      { answer: "functional", display: "functional", hint: "", jp: "機能的な" },
+      { answer: "sophisticated", display: "sophisticated", hint: "sense of fashion or dress", jp: "洗練された" },
+      { answer: "all the rage", display: "all the rage", hint: "", jp: "大流行している" },
+      { answer: "be good value for money", display: "be good value for money", hint: "", jp: "コスパがいい" },
+      { answer: "get hold of", display: "get hold of ~", hint: "", jp: "〜を手に入れる" },
+      { answer: "get a good deal", display: "get a good deal", hint: "", jp: "お得な買い物をする" },
+      { answer: "splurge on", display: "splurge on ~", hint: "", jp: "〜に奮発する" },
+      { answer: "go over budget", display: "go over budget", hint: "", jp: "予算オーバーになる" },
+      { answer: "haggle over the price of", display: "haggle over the price of ~", hint: "", jp: "〜の値段を値切る" },
+      { answer: "fall out of fashion", display: "fall out of fashion", hint: "", jp: "流行遅れになる" },
+      { answer: "dress up", display: "dress up", hint: "", jp: "おしゃれをする" },
+      { answer: "stand out", display: "stand out", hint: "", jp: "目立つ" },
+      { answer: "put on make-up", display: "put on make-up", hint: "", jp: "化粧をする" },
+      { answer: "get a haircut", display: "get a haircut", hint: "", jp: "髪を切る" },
+    ],
+  },
+  "Nature & Environment": {
+    emoji: "🌿", color: "#22c55e", jp: "自然・環境",
+    words: [
+      { answer: "bear fruit", display: "bear fruit", hint: "", jp: "実を結ぶ、成果が出る" },
+      { answer: "see in the wild", display: "see ~ in the wild", hint: "", jp: "野生で〜を見る" },
+      { answer: "feed", display: "feed", hint: "", jp: "餌を与える" },
+      { answer: "clean up litter", display: "clean up litter", hint: "", jp: "ごみを拾う" },
+      { answer: "exotic", display: "exotic", hint: "flowers, plants, animals", jp: "エキゾチックな、珍しい" },
+      { answer: "well-behaved", display: "well-behaved", hint: "", jp: "行儀の良い" },
+      { answer: "pet supplies", display: "pet supplies", hint: "", jp: "ペット用品" },
+      { answer: "crop", display: "crop", hint: "paddy, field, barley, sugarcane", jp: "農作物" },
+      { answer: "cave", display: "cave", hint: "", jp: "洞窟" },
+      { answer: "living things", display: "living things", hint: "", jp: "生き物" },
+      { answer: "life cycle", display: "life cycle", hint: "", jp: "ライフサイクル、生活環" },
+      { answer: "food chain", display: "food chain", hint: "", jp: "食物連鎖" },
+      { answer: "mammal", display: "mammal", hint: "", jp: "哺乳類" },
+      { answer: "fossil fuels", display: "fossil fuels", hint: "", jp: "化石燃料" },
+      { answer: "temperate climate", display: "temperate climate", hint: "", jp: "温帯気候" },
+      { answer: "humid", display: "humid", hint: "", jp: "湿気が多い" },
+      { answer: "unpredictable", display: "unpredictable", hint: "", jp: "予測不可能な" },
+      { answer: "carry out an experiment", display: "carry out an experiment", hint: "", jp: "実験を行う" },
+      { answer: "explore the outdoors", display: "explore the outdoors", hint: "", jp: "野外を探索する" },
+    ],
+  },
+  "Media & Communication": {
+    emoji: "📱", color: "#6366f1", jp: "メディア・コミュニケーション",
+    words: [
+      { answer: "treat with respect", display: "treat ~ with respect", hint: "", jp: "〜を尊重して扱う" },
+      { answer: "have a huge following", display: "have a huge following", hint: "", jp: "多くのフォロワーを持つ" },
+      { answer: "lose one's train of thought", display: "lose one's train of thought", hint: "", jp: "思考が途切れる" },
+      { answer: "keep up with the latest trends", display: "keep up with the latest trends", hint: "", jp: "最新トレンドについていく" },
+      { answer: "interact with", display: "interact with ~", hint: "", jp: "〜と交流する" },
+      { answer: "stay informed", display: "stay informed", hint: "", jp: "情報を常に把握する" },
+      { answer: "get involved in", display: "get involved in ~", hint: "", jp: "〜に関わる、参加する" },
+      { answer: "stumble over one's words", display: "stumble over one's words", hint: "", jp: "言葉に詰まる" },
+      { answer: "get in touch with", display: "get in touch with ~", hint: "", jp: "〜と連絡を取る" },
+      { answer: "convey", display: "convey", hint: "", jp: "伝える、表現する" },
+      { answer: "misleading", display: "misleading", hint: "information, news, advertisement", jp: "誤解を招く" },
+      { answer: "distraction", display: "distraction", hint: "TV, noise, media distraction", jp: "気を散らすもの" },
+      { answer: "online content", display: "online content", hint: "", jp: "オンラインコンテンツ" },
+      { answer: "a means of communication", display: "a means of communication", hint: "", jp: "コミュニケーション手段" },
+      { answer: "feedback", display: "feedback", hint: "", jp: "フィードバック" },
+      { answer: "source of information", display: "source of information", hint: "", jp: "情報源" },
+      { answer: "viral", display: "viral", hint: "", jp: "バイラルな、拡散する" },
+      { answer: "much-talked-about", display: "much-talked-about", hint: "", jp: "話題の" },
+      { answer: "text", display: "text", hint: "a text message / send a text to a friend", jp: "テキストメッセージ（を送る）" },
+      { answer: "glitch", display: "glitch", hint: "", jp: "不具合、バグ" },
+    ],
+  },
+};
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function normalize(s) {
+  return s.trim().toLowerCase().replace(/['']/g, "'").replace(/\s+/g, " ");
+}
+
+function checkAnswer(typed, word) {
+  const t = normalize(typed);
+  const mainClean = normalize(word.answer).replace(/\s*~\s*/g, "").trim();
+  if (t === mainClean) return true;
+  if (word.accepts) {
+    for (const alt of word.accepts) {
+      const altClean = normalize(alt).replace(/\s*~\s*/g, "").trim();
+      if (t === altClean) return true;
+    }
+  }
+  return false;
+}
+
+function formatTime(ms) {
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const cs = Math.floor((ms % 1000) / 10);
+  return m > 0 ? `${m}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}` : `${s}.${String(cs).padStart(2, "0")}s`;
+}
+
+// ─── LEADERBOARD STORAGE ──────────────────────────────────────────────────────
+const LS1 = "ielts_mode1_v1";
+const LS2 = "ielts_mode2_v1";
+
+function getBoard(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch { return {}; } }
+function saveBoard(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+
+function addMode1Score(cat, name, timeMs) {
+  const board = getBoard(LS1);
+  if (!board[cat]) board[cat] = [];
+  board[cat].push({ name, timeMs, date: Date.now() });
+  board[cat].sort((a, b) => a.timeMs - b.timeMs);
+  board[cat] = board[cat].slice(0, 10);
+  saveBoard(LS1, board);
+}
+
+function addMode2Score(cat, name, count, duration) {
+  const board = getBoard(LS2);
+  const key = `${cat}__${duration}`;
+  if (!board[key]) board[key] = [];
+  board[key].push({ name, count, duration, date: Date.now() });
+  board[key].sort((a, b) => b.count - a.count);
+  board[key] = board[key].slice(0, 10);
+  saveBoard(LS2, board);
+}
+
+// ─── TYPING DISPLAY: highlight correct chars ──────────────────────────────────
+function TypingTarget({ target, typed, color }) {
+  const displayTarget = target.replace(/\s*~\s*/g, " ").trim();
+  return (
+    <div style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: 28, letterSpacing: "0.04em", lineHeight: 1.4, userSelect: "none" }}>
+      {displayTarget.split("").map((ch, i) => {
+        const typedCh = typed[i];
+        let color_ = "rgba(255,255,255,0.18)"; // untyped
+        if (typedCh !== undefined) {
+          color_ = normalize(typedCh) === normalize(ch) ? "#f8fafc" : "#f87171";
         }
-        /* Custom scrollbar for a darker theme */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #1a1a24; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
-        
-        #root { min-height: 100vh; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+        const isCursor = i === typed.length;
+        return (
+          <span key={i} style={{ color: color_, position: "relative" }}>
+            {isCursor && <span style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 2, background: color, borderRadius: 2, animation: "blink 1s step-end infinite" }} />}
+            {ch}
+          </span>
+        );
+      })}
+      {typed.length >= displayTarget.length && (
+        <span style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 2, background: color, borderRadius: 2, animation: "blink 1s step-end infinite" }} />
+        </span>
+      )}
+    </div>
+  );
+}
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback } = React;
+// ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
+function Bar({ pct, color }) {
+  return (
+    <div style={{ height: 4, borderRadius: 99, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 0.3s ease" }} />
+    </div>
+  );
+}
 
-        // ─── DATA (Full Categories from ielts-typing.jsx) ────────────────
-        const CATEGORIES = {
-          "Studies & Work": {
-            emoji: "🎓", color: "#f59e0b", jp: "学習・仕事",
-            words: [
-              { answer: "practical", display: "practical", hint: "", jp: "実践的な" },
-              { answer: "diverse", display: "diverse", hint: "", jp: "多様な" },
-              { answer: "top", display: "top", hint: "", jp: "トップの、一流の" },
-              { answer: "undergraduate", display: "undergraduate", hint: "", jp: "学部生" },
-              { answer: "field trip", display: "field trip", hint: "", jp: "校外学習" },
-              { answer: "first-choice university", display: "first-choice university", hint: "", jp: "第一志望の大学" },
-              { answer: "club", display: "club", hint: "", jp: "クラブ、サークル" },
-              { answer: "extra-curricular activity", display: "extra-curricular activity", hint: "", jp: "課外活動" },
-              { answer: "study abroad programme", display: "study abroad programme", hint: "", jp: "海外留学プログラム" },
-              { answer: "job interview", display: "job interview", hint: "", jp: "就職面接" },
-              { answer: "flexible", display: "flexible", hint: "", jp: "融通がきく、柔軟な" },
-              { answer: "supportive", display: "supportive", hint: "", jp: "支援的な" },
-              { answer: "rewarding", display: "rewarding", hint: "", jp: "やりがいのある" },
-              { answer: "juggle", display: "juggle", hint: "", jp: "うまくこなす、両立させる" },
-              { answer: "advance one's career", display: "advance one's career", hint: "", jp: "キャリアを伸ばす" },
-              { answer: "work from home", display: "work from home", hint: "", jp: "在宅勤務する" },
-              { answer: "commute to work", display: "commute to work", hint: "", jp: "通勤する" },
-              { answer: "work night shifts", display: "work night shifts", hint: "", jp: "夜勤をする" },
-              { answer: "get a promotion", display: "get a promotion", hint: "", jp: "昇進する" },
-              { answer: "change one's career path", display: "change one's career path", hint: "", jp: "キャリアチェンジする" },
-            ]
-          },
-          "Places": {
-            emoji: "🏙️", color: "#8b5cf6", jp: "場所",
-            words: [
-              { answer: "rooftop", display: "rooftop", hint: "", jp: "屋上" },
-              { answer: "waterfront", display: "waterfront", hint: "", jp: "水辺、海辺" },
-              { answer: "botanical garden", display: "botanical garden", hint: "", jp: "植物園" },
-              { answer: "theme park", display: "theme park", hint: "", jp: "テーマパーク" },
-              { answer: "landmark", display: "landmark", hint: "", jp: "ランドマーク、名所" },
-              { answer: "day nursery", display: "day nursery", hint: "day care center", jp: "保育所" },
-              { answer: "vibe", display: "vibe", hint: "", jp: "雰囲気" },
-              { answer: "the heart of", display: "the heart of ~", hint: "", jp: "〜の中心部" },
-              { answer: "within walking distance", display: "within walking distance", hint: "", jp: "徒歩圏内" },
-              { answer: "in a fantastic location", display: "in a fantastic location", hint: "", jp: "素晴らしい立地にある" },
-              { answer: "lively", display: "lively", hint: "", jp: "活気のある" },
-              { answer: "multicultural", display: "multicultural", hint: "", jp: "多文化の" },
-              { answer: "iconic", display: "iconic", hint: "", jp: "象徴的な" },
-              { answer: "communal", display: "communal", hint: "", jp: "共同の" },
-              { answer: "charming", display: "charming", hint: "", jp: "魅力的な" },
-              { answer: "state-of-the-art", display: "state-of-the-art", hint: "", jp: "最先端の" },
-              { answer: "boast", display: "boast", hint: "", jp: "（自慢できるものを）持っている" },
-              { answer: "be rich in", display: "be rich in ~", hint: "", jp: "〜が豊富である" },
-            ]
-          },
-          "People": {
-            emoji: "🤝", color: "#ec4899", jp: "人・性格",
-            words: [
-              { answer: "outgoing", display: "outgoing", hint: "sociable, extroverted", jp: "社交的な、外向的な" },
-              { answer: "assertive", display: "assertive", hint: "", jp: "積極的な、自己主張のある" },
-              { answer: "hilarious", display: "hilarious", hint: "extremely funny", jp: "非常に面白い" },
-              { answer: "knowledgeable", display: "knowledgeable", hint: "experienced", jp: "知識豊富な" },
-              { answer: "approachable", display: "approachable", hint: "", jp: "話しかけやすい" },
-              { answer: "like-minded", display: "like-minded", hint: "", jp: "考え方が似ている" },
-              { answer: "energetic", display: "energetic", hint: "", jp: "エネルギッシュな" },
-              { answer: "impatient", display: "impatient", hint: "", jp: "せっかちな" },
-              { answer: "fussy", display: "fussy", hint: "She's fussy about coffee.", jp: "こだわりが強い、うるさい" },
-              { answer: "morning person", display: "morning person", hint: "early bird", jp: "朝型の人" },
-              { answer: "founder", display: "founder", hint: "the founder of a company", jp: "創設者" },
-              { answer: "inspiration", display: "inspiration", hint: "", jp: "インスピレーション、刺激" },
-              { answer: "role model", display: "role model", hint: "", jp: "ロールモデル" },
-              { answer: "multi-tasker", display: "multi-tasker", hint: "good at multi-tasking", jp: "マルチタスクが得意な人" },
-              { answer: "from all walks of life", display: "from all walks of life", hint: "", jp: "あらゆる職業・境遇の" },
-              { answer: "have a positive outlook on life", display: "have a positive outlook on life", hint: "", jp: "人生に対してポジティブな見方をする" },
-              { answer: "have a lot in common", display: "have a lot in common", hint: "", jp: "共通点が多い" },
-            ]
-          }
-          // Note: You can add the remaining categories (Objects, Activities, etc.) here following this pattern.
-        };
+// ─── MODE 1: SPEED RUN ────────────────────────────────────────────────────────
+function Mode1Game({ catKey, playerName, onFinish }) {
+  const cat = CATEGORIES[catKey];
+  const words = cat.words; // in order, all of them
+  const [idx, setIdx] = useState(0);
+  const [typed, setTyped] = useState("");
+  const [startTime] = useState(Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  const [flash, setFlash] = useState(null); // "ok" | "err"
+  const [done, setDone] = useState(false);
+  const [finalTime, setFinalTime] = useState(0);
+  const [skipped, setSkipped] = useState(0);
+  const inputRef = useRef(null);
+  const tickRef = useRef(null);
 
-        // ─── UTILS ───────────────────────────────────────────────────────
-        const LS_KEY = "ielts_typing_scores_v1";
-        const saveResult = (res) => {
-            const history = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
-            history.unshift(res);
-            localStorage.setItem(LS_KEY, JSON.stringify(history.slice(0, 50)));
-        };
+  useEffect(() => {
+    inputRef.current?.focus();
+    tickRef.current = setInterval(() => setElapsed(Date.now() - startTime), 50);
+    return () => clearInterval(tickRef.current);
+  }, []);
 
-        // ─── SUB-COMPONENTS ──────────────────────────────────────────────
-        function Mode1Game({ catKey, playerName, onFinish }) {
-            const words = useRef([...CATEGORIES[catKey].words].sort(() => Math.random() - 0.5));
-            const [idx, setIdx] = useState(0);
-            const [input, setInput] = useState("");
-            const [startTime] = useState(Date.now());
+  function handleKey(e) {
+    if (done) return;
+    if (e.key === "Tab") { e.preventDefault(); skip(); return; }
+  }
 
-            const current = words.current[idx];
+  function handleChange(e) {
+    if (done) return;
+    const val = e.target.value;
+    setTyped(val);
+    const word = words[idx];
+    if (checkAnswer(val, word)) {
+      clearInterval(tickRef.current);
+      setFlash("ok");
+      setTimeout(() => {
+        setFlash(null);
+        if (idx + 1 >= words.length) {
+          const t = Date.now() - startTime;
+          setFinalTime(t);
+          setDone(true);
+          addMode1Score(catKey, playerName, t);
+          clearInterval(tickRef.current);
+        } else {
+          setIdx((i) => i + 1);
+          setTyped("");
+          tickRef.current = setInterval(() => setElapsed(Date.now() - startTime), 50);
+        }
+      }, 180);
+    }
+  }
 
-            const handleChange = (e) => {
-                const val = e.target.value;
-                if (val.toLowerCase() === current.answer.toLowerCase()) {
-                    if (idx + 1 < words.current.length) {
-                        setIdx(idx + 1);
-                        setInput("");
-                    } else {
-                        const totalTime = (Date.now() - startTime) / 1000;
-                        onFinish({ score: Math.round(10000 / totalTime), time: totalTime });
-                    }
-                } else {
-                    setInput(val);
-                }
-            };
+  function skip() {
+    setSkipped((s) => s + 1);
+    setTyped("");
+    if (idx + 1 >= words.length) {
+      const t = Date.now() - startTime;
+      setFinalTime(t);
+      setDone(true);
+      addMode1Score(catKey, playerName, t);
+      clearInterval(tickRef.current);
+    } else {
+      setIdx((i) => i + 1);
+    }
+  }
 
-            return (
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <div style={{ color: '#aaa', fontSize: '14px', marginBottom: '10px' }}>{idx + 1} / {words.current.length}</div>
-                    <div style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '10px', fontFamily: "'Noto Sans JP'" }}>{current.jp}</div>
-                    {current.hint && <div style={{ color: '#666', marginBottom: '20px' }}>({current.hint})</div>}
-                    <input 
-                        autoFocus 
-                        value={input} 
-                        onChange={handleChange}
-                        placeholder="Type the English word..."
-                        style={{ background: '#1a1a24', border: '2px solid #333', color: 'white', padding: '15px', borderRadius: '8px', width: '100%', fontSize: '18px', textAlign: 'center', outline: 'none' }}
-                    />
-                    <div style={{ marginTop: '20px', fontSize: '12px', color: '#444', fontFamily: "'JetBrains Mono'" }}>{current.answer.split('').map((c, i) => input[i]?.toLowerCase() === c.toLowerCase() ? c : '_').join(' ')}</div>
+  if (done) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 24px" }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>🏁</div>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: "#f8fafc", letterSpacing: "0.06em", margin: "0 0 4px" }}>COMPLETE!</h2>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 48, color: cat.color, fontWeight: 700, margin: "16px 0" }}>{formatTime(finalTime)}</div>
+        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 14, marginBottom: 32 }}>
+          {words.length} words · {skipped} skipped
+        </div>
+        <button onClick={() => onFinish(finalTime)} style={{ padding: "14px 40px", background: cat.color, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 16, cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em" }}>
+          SEE RESULTS
+        </button>
+      </div>
+    );
+  }
+
+  const word = words[idx];
+  const progress = (idx / words.length) * 100;
+
+  return (
+    <div style={{ padding: "24px 0" }} onClick={() => inputRef.current?.focus()}>
+      {/* Progress */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.4)" }}>{idx + 1} / {words.length}</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 18, color: cat.color, fontWeight: 700 }}>{formatTime(elapsed)}</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.4)" }}>TAB to skip</span>
+        </div>
+        <Bar pct={progress} color={cat.color} />
+      </div>
+
+      {/* Word card */}
+      <div style={{
+        background: flash === "ok" ? `${cat.color}18` : flash === "err" ? "#f8717118" : "rgba(255,255,255,0.04)",
+        border: `1px solid ${flash === "ok" ? cat.color : "rgba(255,255,255,0.08)"}`,
+        borderRadius: 20, padding: "28px 28px 24px", marginBottom: 16, transition: "all 0.15s", minHeight: 160,
+        cursor: "text"
+      }}>
+        {/* JP & hint */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>{word.jp}</div>
+          {word.hint && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", fontStyle: "italic" }}>{word.hint}</div>}
+        </div>
+        {/* Typing display */}
+        <TypingTarget target={word.display} typed={typed} color={cat.color} />
+      </div>
+
+      {/* Hidden input */}
+      <input
+        ref={inputRef}
+        value={typed}
+        onChange={handleChange}
+        onKeyDown={handleKey}
+        style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
+      />
+
+      {/* Upcoming words */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        {words.slice(idx + 1, idx + 4).map((w, i) => (
+          <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "4px 10px", fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono', monospace" }}>
+            {w.jp}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── MODE 2: TIME ATTACK ──────────────────────────────────────────────────────
+function Mode2Game({ catKey, playerName, duration, onFinish }) {
+  const cat = CATEGORIES[catKey];
+  const [pool] = useState(() => shuffle([...cat.words]));
+  const [idx, setIdx] = useState(0);
+  const [typed, setTyped] = useState("");
+  const [count, setCount] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(duration);
+  const [flash, setFlash] = useState(null);
+  const [done, setDone] = useState(false);
+  const [history, setHistory] = useState([]); // {word, correct}
+  const inputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    timerRef.current = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          clearInterval(timerRef.current);
+          setDone(true);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (done) { addMode2Score(catKey, playerName, count, duration); }
+  }, [done]);
+
+  function next(correct) {
+    setHistory((h) => [...h, { word: pool[idx], correct }]);
+    setIdx((i) => (i + 1) % pool.length);
+    setTyped("");
+  }
+
+  function handleChange(e) {
+    if (done) return;
+    const val = e.target.value;
+    setTyped(val);
+    const word = pool[idx];
+    if (checkAnswer(val, word)) {
+      setCount((c) => c + 1);
+      setFlash("ok");
+      setTimeout(() => { setFlash(null); next(true); }, 150);
+    }
+  }
+
+  function handleKey(e) {
+    if (done) return;
+    if (e.key === "Tab") { e.preventDefault(); setFlash("err"); setTimeout(() => { setFlash(null); next(false); }, 150); }
+  }
+
+  const pct = (timeLeft / duration) * 100;
+  const barColor = pct > 50 ? cat.color : pct > 25 ? "#f59e0b" : "#ef4444";
+  const word = pool[idx];
+
+  if (done) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 24px" }}>
+        <div style={{ fontSize: 48, marginBottom: 8 }}>⏱️</div>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 36, color: "#f8fafc", letterSpacing: "0.06em", margin: "0 0 4px" }}>TIME'S UP!</h2>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 64, color: cat.color, fontWeight: 700, margin: "16px 0" }}>{count}</div>
+        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 14, marginBottom: 32 }}>words typed correctly</div>
+        <button onClick={() => onFinish(count)} style={{ padding: "14px 40px", background: cat.color, border: "none", borderRadius: 12, color: "#000", fontWeight: 800, fontSize: 16, cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em" }}>
+          SEE RESULTS
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "24px 0" }} onClick={() => inputRef.current?.focus()}>
+      {/* Timer */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.4)" }}>score: <span style={{ color: cat.color, fontWeight: 700 }}>{count}</span></span>
+          <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: pct < 25 ? "#ef4444" : "#f8fafc", letterSpacing: "0.06em" }}>{timeLeft}s</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.4)" }}>TAB to skip</span>
+        </div>
+        <Bar pct={pct} color={barColor} />
+      </div>
+
+      {/* Word card */}
+      <div style={{
+        background: flash === "ok" ? `${cat.color}18` : flash === "err" ? "#f8717118" : "rgba(255,255,255,0.04)",
+        border: `1px solid ${flash === "ok" ? cat.color : flash === "err" ? "#f87171" : "rgba(255,255,255,0.08)"}`,
+        borderRadius: 20, padding: "28px 28px 24px", marginBottom: 16, transition: "all 0.12s", minHeight: 160,
+        cursor: "text"
+      }}>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 20, color: "#f8fafc", marginBottom: 4 }}>{word.jp}</div>
+          {word.hint && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", fontStyle: "italic" }}>{word.hint}</div>}
+        </div>
+        <TypingTarget target={word.display} typed={typed} color={cat.color} />
+      </div>
+
+      <input
+        ref={inputRef}
+        value={typed}
+        onChange={handleChange}
+        onKeyDown={handleKey}
+        style={{ position: "absolute", opacity: 0, pointerEvents: "none" }}
+        autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
+      />
+
+      {/* Mini history */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {history.slice(-6).map((h, i) => (
+          <div key={i} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, fontFamily: "'JetBrains Mono', monospace", background: h.correct ? `${cat.color}20` : "rgba(248,113,113,0.15)", color: h.correct ? cat.color : "#f87171" }}>
+            {h.word.answer}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── LEADERBOARD SCREEN ───────────────────────────────────────────────────────
+function LeaderboardScreen({ onBack }) {
+  const [tab, setTab] = useState("mode1");
+  const [catFilter, setCatFilter] = useState("all");
+  const board1 = getBoard(LS1);
+  const board2 = getBoard(LS2);
+
+  const catKeys = Object.keys(CATEGORIES);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0d0d14", padding: "28px 16px" }}>
+      <div style={{ maxWidth: 520, margin: "0 auto" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.35)", fontSize: 14, marginBottom: 24, fontFamily: "'JetBrains Mono', monospace" }}>← back</button>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 40, color: "#f8fafc", letterSpacing: "0.08em", marginBottom: 20 }}>LEADERBOARD</h2>
+
+        {/* Mode tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {["mode1", "mode2"].map((m) => (
+            <button key={m} onClick={() => setTab(m)}
+              style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${tab === m ? "#f59e0b" : "rgba(255,255,255,0.1)"}`, background: tab === m ? "#f59e0b18" : "transparent", color: tab === m ? "#f59e0b" : "rgba(255,255,255,0.4)", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.08em", fontSize: 16, cursor: "pointer" }}>
+              {m === "mode1" ? "MODE 1 · SPEED RUN" : "MODE 2 · TIME ATTACK"}
+            </button>
+          ))}
+        </div>
+
+        {/* Category filter */}
+        <div style={{ overflowX: "auto", marginBottom: 20, paddingBottom: 4 }}>
+          <div style={{ display: "flex", gap: 6, minWidth: "max-content" }}>
+            <button onClick={() => setCatFilter("all")} style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${catFilter === "all" ? "#f8fafc" : "rgba(255,255,255,0.1)"}`, background: catFilter === "all" ? "rgba(255,255,255,0.1)" : "transparent", color: catFilter === "all" ? "#f8fafc" : "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono', monospace" }}>all</button>
+            {catKeys.map((k) => (
+              <button key={k} onClick={() => setCatFilter(k)}
+                style={{ padding: "5px 12px", borderRadius: 8, border: `1px solid ${catFilter === k ? CATEGORIES[k].color : "rgba(255,255,255,0.1)"}`, background: catFilter === k ? `${CATEGORIES[k].color}18` : "transparent", color: catFilter === k ? CATEGORIES[k].color : "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono', monospace" }}>
+                {CATEGORIES[k].emoji} {k}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {tab === "mode1" && (() => {
+          const cats = catFilter === "all" ? catKeys : [catFilter];
+          const rows = [];
+          cats.forEach((cat) => { (board1[cat] || []).forEach((e) => rows.push({ ...e, cat })); });
+          rows.sort((a, b) => a.timeMs - b.timeMs);
+          if (rows.length === 0) return <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>no scores yet</p>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {rows.map((e, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${i < 3 ? "#f59e0b40" : "rgba(255,255,255,0.07)"}`, borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 18, width: 28 }}>{["🥇", "🥈", "🥉"][i] || `${i + 1}`}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: "#f8fafc", fontFamily: "'Bebas Neue', sans-serif", fontSize: 17, letterSpacing: "0.05em" }}>{e.name}</div>
+                    <div style={{ fontSize: 11, color: CATEGORIES[e.cat]?.color || "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>{CATEGORIES[e.cat]?.emoji} {e.cat}</div>
+                  </div>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, fontWeight: 700, color: "#f59e0b" }}>{formatTime(e.timeMs)}</div>
                 </div>
-            );
-        }
+              ))}
+            </div>
+          );
+        })()}
 
-        // ─── MAIN APP ────────────────────────────────────────────────────
-        function App() {
-            const [screen, setScreen] = useState("menu");
-            const [catKey, setCatKey] = useState("Studies & Work");
-            const [playerName, setPlayerName] = useState("");
-            const [mode, setMode] = useState(1);
-            const [finalScore, setFinalScore] = useState(null);
-
-            const handleFinish = (result) => {
-                const entry = { ...result, name: playerName || "Guest", category: catKey, date: new Date().toISOString() };
-                saveResult(entry);
-                setFinalScore(entry);
-                setScreen("results");
-            };
-
-            return (
-                <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-                    {screen === "menu" && (
-                        <div style={{ textAlign: 'center' }}>
-                            <h1 style={{ fontFamily: "'Bebas Neue'", fontSize: '60px', letterSpacing: '4px', margin: '40px 0 10px' }}>IELTS SPRINT</h1>
-                            <p style={{ color: '#666', marginBottom: '40px' }}>Typing Mastery for English Learners</p>
-                            
-                            <div style={{ background: '#1a1a24', padding: '24px', borderRadius: '16px', marginBottom: '20px' }}>
-                                <input 
-                                    placeholder="Enter Nickname" 
-                                    style={{ width: '100%', padding: '12px', background: '#0d0d14', border: '1px solid #333', color: 'white', borderRadius: '8px', marginBottom: '20px' }}
-                                    value={playerName}
-                                    onChange={e => setPlayerName(e.target.value)}
-                                />
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                                    {Object.keys(CATEGORIES).map(k => (
-                                        <button 
-                                            key={k} 
-                                            onClick={() => setCatKey(k)}
-                                            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #333', background: catKey === k ? CATEGORIES[k].color : '#0d0d14', color: 'white', cursor: 'pointer', transition: '0.2s' }}
-                                        >
-                                            {CATEGORIES[k].emoji} <div style={{fontSize: '10px'}}>{k}</div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <button 
-                                onClick={() => setScreen("game")}
-                                style={{ width: '100%', padding: '18px', background: 'white', color: 'black', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer' }}
-                            >
-                                START SPRINT
-                            </button>
-                        </div>
-                    )}
-
-                    {screen === "game" && (
-                        <Mode1Game catKey={catKey} playerName={playerName} onFinish={handleFinish} />
-                    )}
-
-                    {screen === "results" && (
-                        <div style={{ textAlign: 'center', padding: '40px' }}>
-                            <h2 style={{ fontFamily: "'Bebas Neue'", fontSize: '40px' }}>Sprint Finished!</h2>
-                            <div style={{ fontSize: '72px', fontWeight: '800', color: CATEGORIES[catKey].color }}>{finalScore.score}</div>
-                            <p>Time: {finalScore.time.toFixed(2)} seconds</p>
-                            <button 
-                                onClick={() => setScreen("menu")}
-                                style={{ marginTop: '20px', padding: '12px 24px', background: '#333', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-                            >
-                                Back to Menu
-                            </button>
-                        </div>
-                    )}
+        {tab === "mode2" && (() => {
+          const durations = [60, 120, 180];
+          const cats = catFilter === "all" ? catKeys : [catFilter];
+          const rows = [];
+          cats.forEach((cat) => {
+            durations.forEach((dur) => {
+              const key = `${cat}__${dur}`;
+              (board2[key] || []).forEach((e) => rows.push({ ...e, cat }));
+            });
+          });
+          rows.sort((a, b) => b.count - a.count);
+          if (rows.length === 0) return <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>no scores yet</p>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {rows.map((e, i) => (
+                <div key={i} style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${i < 3 ? "#f59e0b40" : "rgba(255,255,255,0.07)"}`, borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 18, width: 28 }}>{["🥇", "🥈", "🥉"][i] || `${i + 1}`}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: "#f8fafc", fontFamily: "'Bebas Neue', sans-serif", fontSize: 17, letterSpacing: "0.05em" }}>{e.name}</div>
+                    <div style={{ fontSize: 11, color: CATEGORIES[e.cat]?.color || "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>{CATEGORIES[e.cat]?.emoji} {e.cat} · {e.duration}s</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "#f59e0b", letterSpacing: "0.05em" }}>{e.count}</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>words</div>
+                  </div>
                 </div>
-            );
-        }
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+// ─── RESULTS SCREEN ───────────────────────────────────────────────────────────
+function ResultsScreen({ mode, catKey, score, playerName, duration, onPlayAgain, onMenu, onBoard }) {
+  const cat = CATEGORIES[catKey];
+  return (
+    <div style={{ minHeight: "100vh", background: "#0d0d14", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>{mode === 1 ? "🏁" : "⏱️"}</div>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: "#f8fafc", letterSpacing: "0.1em", margin: "0 0 6px" }}>
+          {mode === 1 ? "RUN COMPLETE" : "TIME'S UP"}
+        </h2>
+        <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 28, fontFamily: "'JetBrains Mono', monospace" }}>
+          {cat.emoji} {catKey}
+        </p>
+        <div style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${cat.color}40`, borderRadius: 20, padding: "28px 24px", marginBottom: 24 }}>
+          {mode === 1 ? (
+            <>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 52, fontWeight: 700, color: cat.color }}>{formatTime(score)}</div>
+              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginTop: 4 }}>final time</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 72, color: cat.color, letterSpacing: "0.05em" }}>{score}</div>
+              <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginTop: 4 }}>words typed in {duration}s</div>
+            </>
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button onClick={onPlayAgain} style={{ width: "100%", padding: "15px 0", background: cat.color, border: "none", borderRadius: 14, fontWeight: 800, fontSize: 16, cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em", color: "#000" }}>
+            PLAY AGAIN
+          </button>
+          <button onClick={onMenu} style={{ width: "100%", padding: "13px 0", background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, color: "rgba(255,255,255,0.5)", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" }}>
+            choose category
+          </button>
+          <button onClick={onBoard} style={{ width: "100%", padding: "13px 0", background: "transparent", border: `1px solid ${cat.color}40`, borderRadius: 14, color: cat.color, fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace" }}>
+            🏆 leaderboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SETUP SCREEN ─────────────────────────────────────────────────────────────
+function SetupScreen({ mode, catKey, onStart, onBack }) {
+  const cat = CATEGORIES[catKey];
+  const [name, setName] = useState("");
+  const [duration, setDuration] = useState(120);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0d0d14", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ maxWidth: 400, width: "100%" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 28, fontFamily: "'JetBrains Mono', monospace" }}>← back</button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
+          <span style={{ fontSize: 36 }}>{cat.emoji}</span>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "#f8fafc", letterSpacing: "0.06em" }}>{catKey}</div>
+            <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>{cat.jp}</div>
+          </div>
+          <div style={{ marginLeft: "auto", background: `${cat.color}18`, border: `1px solid ${cat.color}40`, borderRadius: 8, padding: "4px 10px", fontSize: 12, color: cat.color, fontFamily: "'JetBrains Mono', monospace" }}>
+            MODE {mode}
+          </div>
+        </div>
+
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "20px", marginBottom: 20, fontSize: 13, color: "rgba(255,255,255,0.45)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.7 }}>
+          {mode === 1 ? (
+            <>⟶ Type all <span style={{ color: cat.color }}>{cat.words.length} words</span> in order<br />⟶ Timer runs until last word<br />⟶ TAB to skip a word<br />⟶ ~ symbol means "fill in a word here"</>
+          ) : (
+            <>⟶ Type as many words as you can<br />⟶ Words appear randomly<br />⟶ TAB to skip (no penalty)<br />⟶ Score = words typed correctly</>
+          )}
+        </div>
+
+        <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", marginBottom: 6, letterSpacing: "0.08em" }}>YOUR NAME</label>
+        <input
+          type="text" value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onStart(name.trim() || "Anonymous", duration)}
+          placeholder="Anonymous" maxLength={20} autoFocus
+          style={{ width: "100%", padding: "12px 16px", background: "rgba(255,255,255,0.05)", border: `1px solid rgba(255,255,255,0.12)`, borderRadius: 12, color: "#f8fafc", fontSize: 16, fontFamily: "'JetBrains Mono', monospace", outline: "none", boxSizing: "border-box", marginBottom: 16 }}
+        />
+
+        {mode === 2 && (
+          <>
+            <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", marginBottom: 10, letterSpacing: "0.08em" }}>TIME LIMIT</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 20 }}>
+              {[60, 120, 180].map((d) => (
+                <button key={d} onClick={() => setDuration(d)}
+                  style={{ padding: "12px 0", borderRadius: 12, border: `1px solid ${duration === d ? cat.color : "rgba(255,255,255,0.1)"}`, background: duration === d ? `${cat.color}18` : "transparent", color: duration === d ? cat.color : "rgba(255,255,255,0.35)", fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", cursor: "pointer" }}>
+                  {d}s
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <button onClick={() => onStart(name.trim() || "Anonymous", duration)}
+          style={{ width: "100%", padding: "16px 0", background: cat.color, border: "none", borderRadius: 14, fontWeight: 800, fontSize: 18, cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.1em", color: "#000" }}>
+          START →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── MENU ─────────────────────────────────────────────────────────────────────
+function MenuScreen({ onSelect }) {
+  const [modeHover, setModeHover] = useState(null);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0d0d14", padding: "32px 16px 60px" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet" />
+
+      <div style={{ maxWidth: 540, margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#f59e0b", letterSpacing: "0.2em", marginBottom: 8 }}>IELTS VOCABULARY</div>
+          <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 58, color: "#f8fafc", lineHeight: 1, letterSpacing: "0.04em", margin: "0 0 8px" }}>
+            WORD<br /><span style={{ color: "#f59e0b" }}>SPRINT</span>
+          </h1>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, fontFamily: "'JetBrains Mono', monospace", margin: 0 }}>
+            type your way to fluency
+          </p>
+        </div>
+
+        {/* Mode selector */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
+          {[
+            { mode: 1, label: "SPEED RUN", sub: "Type all words in a category as fast as possible", icon: "🏁" },
+            { mode: 2, label: "TIME ATTACK", sub: "Type as many words as possible before time runs out", icon: "⏱️" },
+          ].map(({ mode, label, sub, icon }) => (
+            <div key={mode}
+              onMouseEnter={() => setModeHover(mode)}
+              onMouseLeave={() => setModeHover(null)}
+              style={{ gridColumn: "auto", background: modeHover === mode ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${modeHover === mode ? "#f59e0b" : "rgba(255,255,255,0.08)"}`, borderRadius: 16, padding: "18px 16px", transition: "all 0.18s", cursor: "default" }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#f8fafc", letterSpacing: "0.08em", marginBottom: 4 }}>MODE {mode}</div>
+              <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 14, color: "#f59e0b", letterSpacing: "0.06em", marginBottom: 8 }}>{label}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Category grid */}
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "rgba(255,255,255,0.3)", letterSpacing: "0.15em", marginBottom: 14 }}>SELECT CATEGORY + MODE</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {Object.entries(CATEGORIES).map(([key, cat]) => (
+            <div key={key} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 18 }}>{cat.emoji}</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: "#f8fafc", fontSize: 14 }}>{key}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'Noto Sans JP', sans-serif" }}>{cat.jp} · {cat.words.length}語</div>
+                </div>
+              </div>
+              {[1, 2].map((mode) => (
+                <button key={mode} onClick={() => onSelect(key, mode)}
+                  style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${cat.color}50`, background: `${cat.color}12`, color: cat.color, fontSize: 12, cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.08em", transition: "all 0.15s", whiteSpace: "nowrap" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = `${cat.color}30`; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = `${cat.color}12`; }}>
+                  M{mode}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={() => onSelect(null, null, true)}
+          style={{ marginTop: 20, width: "100%", padding: "12px 0", background: "transparent", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 12, color: "#f59e0b", fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, letterSpacing: "0.1em", cursor: "pointer" }}>
+          🏆 LEADERBOARD
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [screen, setScreen] = useState("menu"); // menu | setup | game | results | leaderboard
+  const [catKey, setCatKey] = useState(null);
+  const [mode, setMode] = useState(null);
+  const [playerName, setPlayerName] = useState("Anonymous");
+  const [duration, setDuration] = useState(120);
+  const [score, setScore] = useState(0);
+
+  function handleMenuSelect(key, m, board = false) {
+    if (board) { setScreen("leaderboard"); return; }
+    setCatKey(key); setMode(m); setScreen("setup");
+  }
+
+  function handleStart(name, dur) {
+    setPlayerName(name); setDuration(dur); setScreen("game");
+  }
+
+  function handleFinish(s) {
+    setScore(s); setScreen("results");
+  }
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;500&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0d0d14; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 99px; }
+      `}</style>
+
+      {screen === "menu" && <MenuScreen onSelect={handleMenuSelect} />}
+
+      {screen === "setup" && (
+        <SetupScreen mode={mode} catKey={catKey} onStart={handleStart} onBack={() => setScreen("menu")} />
+      )}
+
+      {screen === "game" && (
+        <div style={{ minHeight: "100vh", background: "#0d0d14", padding: "0 16px" }}>
+          <div style={{ maxWidth: 560, margin: "0 auto", paddingTop: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 18 }}>{CATEGORIES[catKey].emoji}</span>
+              <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{catKey} · MODE {mode}</span>
+              <button onClick={() => setScreen("menu")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.2)", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>✕ quit</button>
+            </div>
+            {mode === 1
+              ? <Mode1Game key={`${catKey}-${playerName}`} catKey={catKey} playerName={playerName} onFinish={handleFinish} />
+              : <Mode2Game key={`${catKey}-${playerName}-${duration}`} catKey={catKey} playerName={playerName} duration={duration} onFinish={handleFinish} />
+            }
+          </div>
+        </div>
+      )}
+
+      {screen === "results" && (
+        <ResultsScreen mode={mode} catKey={catKey} score={score} playerName={playerName} duration={duration}
+          onPlayAgain={() => setScreen("setup")}
+          onMenu={() => setScreen("menu")}
+          onBoard={() => setScreen("leaderboard")}
+        />
+      )}
+
+      {screen === "leaderboard" && <LeaderboardScreen onBack={() => setScreen("menu")} />}
+    </>
+  );
+}
