@@ -275,7 +275,7 @@
 <script type="module">
 import { initializeApp }                         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, collection, addDoc,
-         query, orderBy, limit, getDocs,
+         query, limit, getDocs,
          where }                                 from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 'use strict';
@@ -542,35 +542,52 @@ function getLocal(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}ca
 function saveLocal(arr){try{localStorage.setItem(LS_KEY,JSON.stringify(arr))}catch{}}
 
 async function submitScore(entry){
+  // Strip undefined fields — Firestore rejects documents that contain them
+  const clean = {};
+  for(const [k,v] of Object.entries(entry)) if(v !== undefined) clean[k] = v;
+  clean.submittedAt = Date.now();
+
   // Always save locally first
   const local = getLocal();
-  local.push(entry);
+  local.push(clean);
   saveLocal(local);
+
   // Try Firebase
   if(fbOnline && db){
-    try{ await addDoc(collection(db, SCORES_COL), {...entry, submittedAt: Date.now()}); }
-    catch(e){ console.warn('Firebase write failed — score saved locally', e); }
+    try{
+      await addDoc(collection(db, SCORES_COL), clean);
+    } catch(e){
+      console.warn('Firebase write failed — score saved locally only', e);
+    }
   }
 }
 
 async function fetchScores(mode, catFilter){
   if(fbOnline && db){
     try{
-      const constraints = [
-        where('mode','==', mode),
-        orderBy(mode===1 ? 'timeMs' : 'count', mode===1 ? 'asc' : 'desc'),
-        limit(50)
-      ];
-      if(catFilter !== 'all') constraints.splice(1,0, where('category','==', catFilter));
-      const snap = await getDocs(query(collection(db, SCORES_COL), ...constraints));
-      return snap.docs.map(d => d.data());
-    }catch(e){ console.warn('Firebase read failed, using localStorage', e); }
+      // Simple query on mode only — no composite index needed.
+      // We filter by category and sort in JS to avoid requiring a Firestore index.
+      const q    = query(collection(db, SCORES_COL), where('mode','==', mode), limit(500));
+      const snap = await getDocs(q);
+      let rows   = snap.docs.map(d => d.data());
+
+      // Filter by category if needed
+      if(catFilter !== 'all') rows = rows.filter(r => r.category === catFilter);
+
+      // Sort: Mode 1 → fastest time first; Mode 2 → highest count first
+      rows.sort((a,b) => mode===1 ? a.timeMs - b.timeMs : b.count - a.count);
+
+      return rows.slice(0, 50);
+    } catch(e){
+      console.warn('Firebase read failed, using localStorage', e);
+    }
   }
+
   // localStorage fallback
   let rows = getLocal().filter(r => r.mode === mode);
   if(catFilter !== 'all') rows = rows.filter(r => r.category === catFilter);
-  rows.sort((a,b) => mode===1 ? a.timeMs-b.timeMs : b.count-a.count);
-  return rows.slice(0,50);
+  rows.sort((a,b) => mode===1 ? a.timeMs - b.timeMs : b.count - a.count);
+  return rows.slice(0, 50);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -932,16 +949,11 @@ function skip(){
 
 // ── FINISH ROUND ──────────────────────────────────────────────────────────────
 async function finishRound(){
-  // Save score
-  const entry = {
-    mode:     S.mode,
-    category: S.catKey,
-    name:     S.playerName,
-    timeMs:   S.mode===1 ? S.elapsed   : undefined,
-    count:    S.mode===2 ? S.count     : undefined,
-    duration: S.mode===2 ? S.duration  : undefined,
-    date:     Date.now(),
-  };
+  // Build score entry — never include undefined fields
+  const entry = { mode: S.mode, category: S.catKey, name: S.playerName, date: Date.now() };
+  if(S.mode===1) entry.timeMs   = S.elapsed;
+  if(S.mode===2) entry.count    = S.count;
+  if(S.mode===2) entry.duration = S.duration;
   await submitScore(entry);
 
   // Show done panel — replace game-inner content
