@@ -97,7 +97,11 @@
     .typing-target .char.untyped{color:rgba(255,255,255,0.18)}
     .typing-target .char.correct{color:#f8fafc}
     .typing-target .char.wrong{color:#f87171}
+    .typing-target .char.missed-space{color:#f87171;font-size:0.75em;vertical-align:middle;position:relative;top:-0.05em}
     .typing-target .cursor{display:inline-block;width:2px;height:1.1em;vertical-align:middle;border-radius:2px;animation:blink 1s step-end infinite;position:relative;top:-1px;margin-right:1px}
+    /* ── SOUND TOGGLE ── */
+    #sound-btn{position:fixed;bottom:14px;left:14px;padding:5px 12px;border-radius:99px;font-size:11px;font-family:'JetBrains Mono',monospace;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);z-index:100;cursor:pointer;transition:all 0.3s}
+    #sound-btn.sound-on{border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.1);color:#f59e0b}
     .hidden-input{position:fixed;top:0;left:0;opacity:0;pointer-events:none;width:1px;height:1px}
     .upcoming{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
     .upcoming-chip{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:4px 10px;font-size:12px;color:rgba(255,255,255,0.2);font-family:'Noto Sans JP',sans-serif}
@@ -112,6 +116,10 @@
     .done-sub{color:rgba(255,255,255,0.4);font-size:14px;margin-bottom:32px}
     .done-btn{padding:14px 40px;border:none;border-radius:12px;color:#000;font-weight:800;font-size:16px;font-family:'Bebas Neue',sans-serif;letter-spacing:0.1em;margin-bottom:12px;display:block;width:100%;max-width:280px;margin-left:auto;margin-right:auto}
     .done-menu-btn{display:block;width:100%;max-width:280px;margin:0 auto;padding:12px 0;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:12px;color:rgba(255,255,255,0.45);font-size:13px;font-family:'JetBrains Mono',monospace}
+    .done-retry-btn{display:block;width:100%;max-width:280px;margin:0 auto 10px;padding:13px 0;background:transparent;border:2px solid;border-radius:12px;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:0.1em;transition:opacity 0.15s}
+    .done-retry-btn:hover{opacity:0.75}
+    .results-btn-retry{width:100%;padding:13px 0;background:transparent;border:2px solid;border-radius:14px;font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:0.1em;transition:opacity 0.15s}
+    .results-btn-retry:hover{opacity:0.75}
 
     /* ── RESULTS ── */
     #screen-results{display:none;align-items:center;justify-content:center;padding:24px}
@@ -165,7 +173,7 @@
     <div class="menu-inner">
       <div class="menu-tag">IELTS VOCABULARY</div>
       <div class="menu-title">WORD<br><span>SPRINT</span></div>
-      <div class="menu-sub"></div>
+      <div class="menu-sub">type your way to fluency</div>
       <div class="mode-grid">
         <div class="mode-card">
           <div class="mode-card-icon">🏁</div>
@@ -243,6 +251,7 @@
       </div>
       <div class="results-btns">
         <button class="results-btn-primary" id="results-play-again">PLAY AGAIN</button>
+        <button class="results-btn-retry" id="results-retry-btn" onclick="retryRound()">↺ RETRY SAME</button>
         <button class="results-btn-sec" onclick="showScreen('menu')">← main menu</button>
         <button class="results-btn-lb"  id="results-lb-btn" onclick="showScreen('leaderboard')">🏆 leaderboard</button>
       </div>
@@ -260,6 +269,10 @@
         <button class="tab-btn" id="tab-m2" onclick="setLbTab('mode2')">MODE 2 · TIME ATTACK</button>
       </div>
       <div class="filter-scroll"><div class="filter-row" id="filter-row"></div></div>
+      <div id="duration-filter-row" style="display:none;margin-bottom:16px">
+        <div style="font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:0.12em;margin-bottom:8px">TIME LIMIT</div>
+        <div style="display:flex;gap:8px" id="duration-filter-btns"></div>
+      </div>
       <div class="lb-list" id="lb-list"></div>
     </div>
   </div>
@@ -268,6 +281,8 @@
 
 <!-- Connectivity badge -->
 <div id="conn-badge" class="loading">⬤ connecting…</div>
+<!-- Sound toggle -->
+<button id="sound-btn" class="sound-on" onclick="toggleSound()" title="Toggle sound effects">🔊 sound on</button>
 
 <!-- ═══════════════════════════════════════════════════════════════
      FIREBASE + GAME LOGIC
@@ -536,8 +551,106 @@ const CATEGORIES = {
   ]},
 };
 
+// ── SOUND ENGINE ─────────────────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let soundEnabled = true;
+
+function getAudioCtx(){
+  if(!audioCtx) audioCtx = new AudioCtx();
+  // Resume if suspended (browsers suspend until user gesture)
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Play a short synthesised tone
+// type: 'key' | 'error' | 'success'
+function playSound(type){
+  if(!soundEnabled) return;
+  try{
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    if(type === 'key'){
+      // Soft click: very short, mid-high pitch
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+      osc.start(now); osc.stop(now + 0.06);
+    } else if(type === 'error'){
+      // Short sharp descending two-tone "wrong" beep
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.setValueAtTime(300, now + 0.06);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.setValueAtTime(0.12, now + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+      osc.start(now); osc.stop(now + 0.18);
+    } else if(type === 'success'){
+      // Rising two-note chime
+      const osc2  = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.setValueAtTime(660, now);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+      osc.start(now); osc.stop(now + 0.18);
+      osc2.type = 'sine'; osc2.frequency.setValueAtTime(880, now + 0.1);
+      gain2.gain.setValueAtTime(0.0001, now + 0.1);
+      gain2.gain.linearRampToValueAtTime(0.18, now + 0.14);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      osc2.start(now + 0.1); osc2.stop(now + 0.35);
+    }
+  } catch(e){ /* silently ignore audio errors */ }
+}
+
+window.toggleSound = function(){
+  soundEnabled = !soundEnabled;
+  localStorage.setItem('ielts_sound', soundEnabled ? '1' : '0');
+  const btn = document.getElementById('sound-btn');
+  if(soundEnabled){
+    btn.textContent = '🔊 sound on';
+    btn.classList.add('sound-on');
+  } else {
+    btn.textContent = '🔇 sound off';
+    btn.classList.remove('sound-on');
+  }
+};
+
+function initSound(){
+  const saved = localStorage.getItem('ielts_sound');
+  if(saved === '0'){
+    soundEnabled = false;
+    const btn = document.getElementById('sound-btn');
+    btn.textContent = '🔇 sound off';
+    btn.classList.remove('sound-on');
+  }
+}
+
 // ── SCORE STORAGE ─────────────────────────────────────────────────────────────
 const LS_KEY = 'ielts_scores_v3';
+const LS_RESET_KEY = 'ielts_scores_reset_date';
+const RESET_DAYS = 30;
+
+function checkAndResetLocalScores(){
+  const stored = localStorage.getItem(LS_RESET_KEY);
+  const now = Date.now();
+  if(!stored){
+    localStorage.setItem(LS_RESET_KEY, now.toString());
+    return;
+  }
+  const daysSince = (now - parseInt(stored)) / (1000 * 60 * 60 * 24);
+  if(daysSince >= RESET_DAYS){
+    localStorage.removeItem(LS_KEY);
+    localStorage.setItem(LS_RESET_KEY, now.toString());
+    console.log('Leaderboard local scores reset after 30 days');
+  }
+}
+
 function getLocal(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch{return[]}}
 function saveLocal(arr){try{localStorage.setItem(LS_KEY,JSON.stringify(arr))}catch{}}
 
@@ -562,7 +675,7 @@ async function submitScore(entry){
   }
 }
 
-async function fetchScores(mode, catFilter){
+async function fetchScores(mode, catFilter, durFilter='all'){
   if(fbOnline && db){
     try{
       // Simple query on mode only — no composite index needed.
@@ -571,8 +684,14 @@ async function fetchScores(mode, catFilter){
       const snap = await getDocs(q);
       let rows   = snap.docs.map(d => d.data());
 
+      // Filter to last 30 days
+      const cutoff = Date.now() - RESET_DAYS * 24 * 60 * 60 * 1000;
+      rows = rows.filter(r => (r.date||0) >= cutoff);
+
       // Filter by category if needed
       if(catFilter !== 'all') rows = rows.filter(r => r.category === catFilter);
+      // Filter by duration if needed (Mode 2 only)
+      if(mode === 2 && durFilter !== 'all') rows = rows.filter(r => Number(r.duration) === Number(durFilter));
 
       // Sort: Mode 1 → fastest time first; Mode 2 → highest count first
       rows.sort((a,b) => mode===1 ? a.timeMs - b.timeMs : b.count - a.count);
@@ -584,13 +703,42 @@ async function fetchScores(mode, catFilter){
   }
 
   // localStorage fallback
-  let rows = getLocal().filter(r => r.mode === mode);
+  const cutoff = Date.now() - RESET_DAYS * 24 * 60 * 60 * 1000;
+  let rows = getLocal().filter(r => r.mode === mode && (r.date||0) >= cutoff);
   if(catFilter !== 'all') rows = rows.filter(r => r.category === catFilter);
+  if(mode === 2 && durFilter !== 'all') rows = rows.filter(r => Number(r.duration) === Number(durFilter));
   rows.sort((a,b) => mode===1 ? a.timeMs - b.timeMs : b.count - a.count);
   return rows.slice(0, 50);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
+// Profanity filter — blocks common English curse words.
+// Uses a pattern-match approach; asterisks replace the middle of blocked words in the display.
+const BAD_WORDS = [
+  'fuck','shit','cunt','bitch','asshole','bastard','damn','dick','cock','pussy',
+  'arse','ass','piss','slut','whore','twat','wank','bollocks','bugger','crap',
+  'nigger','nigga','faggot','fag','retard','spastic','kike','chink','spic',
+  'motherfucker','motherfucking','fucker','fucking','shitty','bullshit',
+  'jackass','dumbass','dipshit','douchebag','prick','jerk','moron','idiot',
+];
+
+function cleanName(raw){
+  if(!raw) return '';
+  // Normalise: lower case, collapse spaces
+  let name = raw.trim().replace(/\s+/g,' ');
+  const lower = name.toLowerCase().replace(/[^a-z0-9 ]/g,''); // strip special chars for detection
+  for(const word of BAD_WORDS){
+    // Check if bad word appears in the stripped version
+    if(lower.includes(word)){
+      // Replace with "Player" + random 3-digit number so the leaderboard still has a name
+      return 'Player' + Math.floor(100 + Math.random()*900);
+    }
+  }
+  // Also block names that are only spaces/numbers/symbols with no real content
+  if(name.replace(/[^a-zA-Z]/g,'').length === 0 && name.length > 0) return 'Player' + Math.floor(100+Math.random()*900);
+  return name;
+}
+
 function shuffle(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function normalize(s){return s.trim().toLowerCase().replace(/['']/g,"'").replace(/\s+/g,' ')}
 function checkAnswer(typed,word){
@@ -613,7 +761,7 @@ const S = {
   words:[], idx:0, typed:'', startTime:0, elapsed:0,
   timeLeft:0, count:0, skipped:0, history:[],
   tickId:null, done:false,
-  lbTab:'mode1', lbFilter:'all'
+  lbTab:'mode1', lbFilter:'all', lbDuration:'all'
 };
 
 // ── QUIT / NAVIGATION FIX ─────────────────────────────────────────────────────
@@ -745,7 +893,7 @@ function applyDurStyle(btn, active, color){
 
 window.startGame = function(){
   const nameVal = document.getElementById('setup-name').value.trim();
-  S.playerName = nameVal || 'Anonymous';
+  S.playerName = cleanName(nameVal) || 'Anonymous';
   const cat = CATEGORIES[S.catKey];
 
   stopTimers();
@@ -853,26 +1001,111 @@ function renderWordCard(){
 function renderTypingTarget(word, typed){
   const target  = document.getElementById('typing-target');
   const display = (word.display||'').replace(/\s*~\s*/g,' ').trim();
-  let html = '';
-  for(let i=0; i<display.length; i++){
-    const ch=display[i], tc=typed[i];
-    let cls='char untyped';
-    if(tc!==undefined) cls = normalize(tc)===normalize(ch) ? 'char correct' : 'char wrong';
-    const cursor = i===typed.length ? `<span class="cursor" style="background:${CATEGORIES[S.catKey].color}"></span>` : '';
-    const safe   = ch==='<'?'&lt;':ch==='>'?'&gt;':ch==='&'?'&amp;':ch;
-    html += `${cursor}<span class="${cls}">${safe}</span>`;
+  target.innerHTML = buildTypingHTML(display, typed, CATEGORIES[S.catKey].color);
+}
+
+// Two-pass renderer:
+//   Pass 1 — classify every display character (correct / wrong / missed-space / untyped)
+//             using a DUAL INDEX so a missed space does NOT consume the typed character.
+//   Pass 2 — build HTML, inserting the blinking cursor before the first untyped position.
+function buildTypingHTML(display, typed, color){
+  // ── Pass 1: classify ────────────────────────────────────────────────────────
+  const chars = []; // [{ch, cls, label}]
+  let ti = 0;       // typed index — only advances when a typed char is "consumed"
+
+  for(let di = 0; di < display.length; di++){
+    const ch = display[di];
+    const tc = typed[ti]; // next unmatched typed character
+
+    let cls   = 'char untyped';
+    let label = null;
+
+    if(tc !== undefined){
+      if(ch === ' ' && tc !== ' '){
+        // Player skipped a required space.
+        // Show a red _ marker but do NOT consume the typed char (ti stays the same)
+        cls   = 'missed-space';
+        label = '•'; // bullet • — always visible as red dot
+        // ti intentionally NOT incremented
+      } else {
+        // Normal character comparison — case-insensitive, spaces must be spaces
+        cls = tc.toLowerCase() === ch.toLowerCase() ? 'char correct' : 'char wrong';
+        ti++; // consume typed char
+      }
+    }
+    chars.push({ ch, cls, label, tiAfter: ti });
   }
-  if(typed.length >= display.length)
-    html += `<span class="cursor" style="background:${CATEGORIES[S.catKey].color}"></span>`;
-  target.innerHTML = html;
+
+  // ── Cursor position ─────────────────────────────────────────────────────────
+  // The cursor sits before the first display position where we have run out of typed chars.
+  // Because missed spaces don't advance ti, cursorDi correctly sits AFTER the _ marker.
+  let cursorDi = display.length; // default: after all chars (cursor at end)
+  let tiBefore = 0;
+  for(let di = 0; di < chars.length; di++){
+    if(tiBefore === typed.length){ cursorDi = di; break; }
+    tiBefore = chars[di].tiAfter;
+  }
+
+  // ── Pass 2: build HTML ──────────────────────────────────────────────────────
+  const cur = `<span class="cursor" style="background:${color}"></span>`;
+  let html  = '';
+  for(let di = 0; di < chars.length; di++){
+    if(di === cursorDi) html += cur;
+    const { ch, cls, label } = chars[di];
+    const raw  = label !== null ? label : ch;
+    const safe = raw === '<' ? '&lt;' : raw === '>' ? '&gt;' : raw === '&' ? '&amp;' : raw;
+    html += `<span class="${cls}">${safe}</span>`;
+  }
+  if(cursorDi === display.length) html += cur; // cursor after last char
+
+  return html;
 }
 
 // ── INPUT ─────────────────────────────────────────────────────────────────────
 function onInput(e){
   if(S.done) return;
-  S.typed = e.target.value;
+  const prev = S.typed;
   const word = S.words[S.idx % S.words.length];
+  const displayCap = (word.display||'').replace(/\s*~\s*/g,' ').trim();
+
+  // Cap: never allow more characters than the prompt has — stops typing past the end
+  let val = e.target.value;
+  if(val.length > displayCap.length){
+    val = val.slice(0, displayCap.length);
+    e.target.value = val;
+  }
+  S.typed = val;
   renderTypingTarget(word, S.typed);
+
+  if(S.typed.length > prev.length){
+    // A character was added — check if the newest character is correct
+    const display = displayCap; // already computed above
+    // Find what display position we are about to fill (after typed.length-1 chars)
+    // Use the same dual-index logic to find what display char maps to this typed index
+    const newTi = S.typed.length - 1; // index of the newly typed char
+    let mappedDi = -1;
+    let ti2 = 0;
+    for(let di=0; di<display.length; di++){
+      const ch2 = display[di];
+      if(ti2 === newTi){ mappedDi = di; break; }
+      const tc2 = S.typed[ti2];
+      if(tc2 !== undefined){
+        if(ch2 === ' ' && tc2 !== ' '){ /* missed space — do not advance ti2 */ }
+        else ti2++;
+      }
+    }
+    const newChar    = S.typed[newTi];
+    const targetChar = mappedDi >= 0 ? display[mappedDi] : null;
+    const isCorrect  = targetChar !== null && newChar.toLowerCase() === targetChar.toLowerCase();
+    const isMissedSp = targetChar === ' ' && newChar !== ' ';
+
+    if(isMissedSp || !isCorrect){
+      playSound('error');
+    } else {
+      playSound('key');
+    }
+  }
+
   if(checkAnswer(S.typed, word)) accept();
 }
 function onKeydown(e){
@@ -885,6 +1118,9 @@ function flashCard(type){
   if(!card) return;
   card.classList.add('flash-'+type);
   card.style.borderColor = type==='ok' ? CATEGORIES[S.catKey].color : '#f87171';
+  // Sound: 'ok' plays success chime, 'err' plays error buzz
+  if(type === 'ok')  playSound('success');
+  if(type === 'err') playSound('error');
   setTimeout(()=>{
     card.classList.remove('flash-'+type);
     card.style.borderColor = 'rgba(255,255,255,0.08)';
@@ -969,12 +1205,31 @@ async function finishRound(){
       <div class="done-title">${S.mode===1?'COMPLETE!':'TIME\'S UP!'}</div>
       <div class="done-score" style="color:${cat.color}">${score}</div>
       <div class="done-sub">${sub}</div>
-      <button class="done-btn" style="background:${cat.color}" onclick="showResults()">SEE RESULTS →</button>
+      <button class="done-btn" style="background:${cat.color}" onclick="goToLeaderboard()">SEE RESULTS →</button>
+      <button class="done-retry-btn" style="border-color:${cat.color};color:${cat.color}" onclick="retryRound()">↺ RETRY</button>
       <button class="done-menu-btn" onclick="quitToMenu()">← main menu</button>
     </div>`;
 }
 
-// ── RESULTS SCREEN ────────────────────────────────────────────────────────────
+// ── RETRY ─────────────────────────────────────────────────────────────────────
+// Restarts immediately — same category, mode, name, duration. Skips setup screen.
+window.retryRound = function(){
+  stopTimers();
+  restoreGameDOM();
+  startGame();
+};
+
+// ── GO TO LEADERBOARD (called by "SEE RESULTS" button) ────────────────────────
+// Pre-selects the correct tab + category + duration so the player lands on
+// the right leaderboard for the round they just finished.
+window.goToLeaderboard = function(){
+  S.lbTab      = S.mode===1 ? 'mode1' : 'mode2';
+  S.lbFilter   = S.catKey;               // pre-select this category
+  S.lbDuration = S.mode===2 ? S.duration : 'all'; // pre-select this duration
+  showScreen('leaderboard');
+};
+
+// ── RESULTS SCREEN (still used by PLAY AGAIN button) ─────────────────────────
 window.showResults = function(){
   const cat   = CATEGORIES[S.catKey];
   const score = S.mode===1 ? S.elapsed : S.count;
@@ -1006,12 +1261,16 @@ window.showResults = function(){
   lb.style.borderColor = hex2rgba(cat.color,0.4);
   lb.style.color       = cat.color;
 
+  const rb = document.getElementById('results-retry-btn');
+  if(rb){ rb.style.borderColor = hex2rgba(cat.color,0.6); rb.style.color = cat.color; }
+
   showScreen('results');
 };
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────────
-window.setLbTab    = t => { S.lbTab=t; S.lbFilter='all'; renderLeaderboard(); };
-window.setLbFilter = f => { S.lbFilter=f; renderLeaderboard(); };
+window.setLbTab    = t => { S.lbTab=t; S.lbFilter='all'; S.lbDuration='all'; renderLeaderboard(); };
+window.setLbFilter   = f => { S.lbFilter=f; renderLeaderboard(); };
+window.setLbDuration = d => { S.lbDuration=d; renderLeaderboard(); };
 
 async function renderLeaderboard(){
   // Tabs
@@ -1025,19 +1284,40 @@ async function renderLeaderboard(){
   src.textContent = fbOnline ? '🌐 Global · live from Firebase' : '💾 Local · stored in this browser';
   src.style.color = fbOnline ? '#10b981' : 'rgba(255,255,255,0.3)';
 
-  // Filter buttons
+  // Category filter buttons
   const frow = document.getElementById('filter-row');
   frow.innerHTML = '';
   frow.appendChild(makeFilterBtn('all','All','rgba(255,255,255,0.35)'));
   for(const [key,cat] of Object.entries(CATEGORIES))
     frow.appendChild(makeFilterBtn(key, cat.emoji+' '+key, cat.color));
 
+  // Duration filter — only shown for Mode 2
+  const durRow = document.getElementById('duration-filter-row');
+  const durBtns = document.getElementById('duration-filter-btns');
+  const modeNum = S.lbTab==='mode1' ? 1 : 2;
+  if(modeNum === 2){
+    durRow.style.display = 'block';
+    durBtns.innerHTML = '';
+    const durOptions = [{label:'All times', val:'all'},{label:'30s',val:30},{label:'1m',val:60},{label:'2m',val:120},{label:'3m',val:180}];
+    durOptions.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.textContent = opt.label;
+      const active = String(S.lbDuration) === String(opt.val);
+      btn.style.cssText = `padding:5px 14px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'JetBrains Mono',monospace;border:1px solid ${active?'#f59e0b':'rgba(255,255,255,0.1)'};background:${active?'rgba(245,158,11,0.15)':'transparent'};color:${active?'#f59e0b':'rgba(255,255,255,0.35)'};transition:all 0.15s`;
+      btn.onclick = () => window.setLbDuration(opt.val);
+      durBtns.appendChild(btn);
+    });
+  } else {
+    durRow.style.display = 'none';
+    S.lbDuration = 'all';
+  }
+
   // Loading spinner
   const list = document.getElementById('lb-list');
   list.innerHTML = '<div class="lb-loading"><div class="spinner"></div> loading scores…</div>';
 
-  const modeNum = S.lbTab==='mode1' ? 1 : 2;
-  const rows    = await fetchScores(modeNum, S.lbFilter);
+  const durFilter = S.lbDuration === 'all' ? 'all' : Number(S.lbDuration);
+  const rows    = await fetchScores(modeNum, S.lbFilter, durFilter);
 
   list.innerHTML = '';
   if(!rows.length){
@@ -1081,6 +1361,8 @@ function makeFilterBtn(key, label, color){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+checkAndResetLocalScores();
+initSound();
 renderMenu();
 initFirebase();
 
